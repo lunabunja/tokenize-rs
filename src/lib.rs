@@ -62,8 +62,9 @@ impl Tokenize {
         
         let token = format!("{}{}.{}", prefix_part, account_part, time_part);
         let signature = Self::compute_hmac(&token, &self.secret);
+        let signature_part = base64::encode_config(signature, base64::STANDARD_NO_PAD);
 
-        Ok(format!("{}.{}", token, String::from_utf8(signature.to_vec())?))
+        Ok(format!("{}.{}", token, signature_part))
     }
 
     pub fn current_token_time() -> i64 {
@@ -74,5 +75,24 @@ impl Tokenize {
         let input = format!("TTF.{}.{}", TOKENIZE_VERSION, token);
 
         HMAC::mac(input.as_bytes(), secret)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Tokenize;
+
+    #[test]
+    fn generate_token() {
+        let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
+        tokenize.generate("326359466171826176").expect("Couldn't generate new token");
+    }
+
+    #[test]
+    fn generate_token_with_prefix() {
+        let prefix = "prefix";
+
+        let tokenize = Tokenize::new("uwu".as_bytes().to_vec()).set_prefix(prefix);
+        assert!(tokenize.generate("326359466171826176").expect("Couldn't generate new token").starts_with(prefix));
     }
 }
