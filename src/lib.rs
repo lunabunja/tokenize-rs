@@ -25,6 +25,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
+//! # Tokenize for Rust
+//! 
+//! Implementation of the [Tokenize] specification in rust
+//! 
+//! [Tokenize]: https://github.com/cyyynthia/tokenize
+
 extern crate base64;
 
 use chrono::Utc;
@@ -190,10 +196,28 @@ mod tests {
     }
 
     #[test]
+    fn validate_token_with_prefix() {
+        let prefix = "prefix";
+
+        let tokenize = Tokenize::new("uwu".as_bytes().to_vec()).set_prefix(prefix);
+        tokenize.validate("prefix.MzI2MzU5NDY2MTcxODI2MTc2.OTUzNDE0NDE.JMOWr0OOZqbqqTkQp5LvvzBmsvu5JWbAPp4UpwzyJKI", |_id| {
+            Some(Box::new(TestAccount { last_token_reset: 0 }))
+        }).expect("Couldn't validate token");
+    }
+
+    #[test]
     fn validate_invalidated_token() {
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
         assert!(tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
             Some(Box::new(TestAccount { last_token_reset: 1641641228500 }))
+        }).is_err());
+    }
+
+    #[test]
+    fn validate_token_with_invalid_signature() {
+        let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
+        assert!(tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.thisisinvalid", |_id| {
+            Some(Box::new(TestAccount { last_token_reset: 0 }))
         }).is_err());
     }
 }
