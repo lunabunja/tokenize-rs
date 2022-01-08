@@ -78,6 +78,8 @@ impl Tokenize {
     /// # Examples
     /// 
     /// ```
+    /// use tokenize_rs::{Tokenize, Account};
+    /// 
     /// pub struct TestAccount;
     /// 
     /// impl Account for TestAccount {
@@ -88,13 +90,13 @@ impl Tokenize {
     /// 
     /// let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
     /// 
-    /// tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUxODMwMzA.J3Sm9DIZx0+crUrYT9VAWhPIt89Pn8Yp+NSE9N6jdXw", |_id| {
-    ///     Box::new(TestAccount)
+    /// tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
+    ///     Some(Box::new(TestAccount))
     /// }).expect("Couldn't validate token");
     /// ```
-    pub fn validate<S, F>(&self, token: S, account_fetcher: F) -> Result<bool, Box<dyn Error>> where 
+    pub fn validate<S, F>(&self, token: S, account_fetcher: F) -> Result<Box<dyn Account>, Box<dyn Error>> where 
         S: Into<String>,
-        F: Fn(String) -> Box<dyn Account> {
+        F: Fn(String) -> Option<Box<dyn Account>> {
         let token = token.into();
         let splitted = token.split(".").collect::<Vec<&str>>();
 
@@ -115,15 +117,27 @@ impl Tokenize {
 
         let signature = Self::compute_hmac(&signature_string, &self.secret);
 
+        eprintln!("{}", base64::encode_config(signature, base64::STANDARD_NO_PAD));
+
         if base64::encode_config(signature, base64::STANDARD_NO_PAD) != splitted[max_len - 1] {
             return Err("Token signature doesn't match".into());
         }
 
+        let account_id: String = str::from_utf8(&base64::decode_config(splitted[max_len - 3], base64::STANDARD_NO_PAD)?)?.to_string();
         let timestamp: u64 = str::from_utf8(&base64::decode_config(splitted[max_len - 2], base64::STANDARD_NO_PAD)?)?.parse()?;
 
-        // todo: decode account id, call account_fetcher, compare last_token_reset with timestamp
+        let account_opt = account_fetcher(account_id);
+        
+        let account = if let Some(account) = account_opt {
+            account
+        } else { return Err("No account is tied to this id".into()); };
 
-        Ok(true)
+        let last_token_reset = account.last_token_reset();
+        if last_token_reset as i64 > ((timestamp as i64 * 1000) + TOKENIZE_EPOCH) {
+            return Err("Token was invalidated".into());
+        }
+
+        Ok(account)
     }
 
     pub fn current_token_time() -> i64 {
@@ -170,8 +184,8 @@ mod tests {
     #[test]
     fn validate_token() {
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
-        tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUxODMwMzA.J3Sm9DIZx0+crUrYT9VAWhPIt89Pn8Yp+NSE9N6jdXw", |_id| {
-            Box::new(TestAccount)
+        tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
+            Some(Box::new(TestAccount))
         }).expect("Couldn't validate token");
     }
 }
