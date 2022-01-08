@@ -32,6 +32,7 @@
 //! [Tokenize]: https://github.com/cyyynthia/tokenize
 
 extern crate base64;
+extern crate crypto;
 
 use chrono::Utc;
 use hmac_sha256::HMAC;
@@ -123,7 +124,7 @@ impl Tokenize {
 
         let signature = Self::compute_hmac(&signature_string, &self.secret);
 
-        if base64::encode_config(signature, base64::STANDARD_NO_PAD) != splitted[max_len - 1] {
+        if !crypto::util::fixed_time_eq(base64::encode_config(signature, base64::STANDARD_NO_PAD).as_bytes(), splitted[max_len - 1].as_bytes()) {
             return Err("Token signature doesn't match".into());
         }
 
