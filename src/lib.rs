@@ -117,8 +117,6 @@ impl Tokenize {
 
         let signature = Self::compute_hmac(&signature_string, &self.secret);
 
-        eprintln!("{}", base64::encode_config(signature, base64::STANDARD_NO_PAD));
-
         if base64::encode_config(signature, base64::STANDARD_NO_PAD) != splitted[max_len - 1] {
             return Err("Token signature doesn't match".into());
         }
@@ -159,11 +157,13 @@ pub trait Account {
 mod tests {
     use crate::{Tokenize, Account};
 
-    pub struct TestAccount;
+    pub struct TestAccount {
+        last_token_reset: u64
+    }
 
     impl Account for TestAccount {
         fn last_token_reset(&self) -> u64 {
-            0
+            self.last_token_reset
         }
     }
 
@@ -185,7 +185,15 @@ mod tests {
     fn validate_token() {
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
         tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
-            Some(Box::new(TestAccount))
+            Some(Box::new(TestAccount { last_token_reset: 0 }))
         }).expect("Couldn't validate token");
+    }
+
+    #[test]
+    fn validate_invalidated_token() {
+        let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
+        assert!(tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
+            Some(Box::new(TestAccount { last_token_reset: 1641641228500 }))
+        }).is_err());
     }
 }
