@@ -87,7 +87,7 @@ impl Tokenize {
     /// # Examples
     /// 
     /// ```
-    /// use tokenize_rs::{Tokenize, Account};
+    /// use tokenize::{Tokenize, Account};
     /// 
     /// pub struct TestAccount;
     /// 
