@@ -1,6 +1,6 @@
 [package]
 name = "tokenize"
-version = "0.1.0"
+version = "0.2.0"
 license = "BSD-3-Clause"
 description = "Implementation of the Tokenize specification in Rust"
 repository = "https://github.com/TheOddGarlic/tokenize-rs"
@@ -13,3 +13,4 @@ chrono = "0.4"
 base64 = "0.13"
 hmac-sha256 = "1.1"
 rust-crypto = "0.2"
+anyhow = "1.0"

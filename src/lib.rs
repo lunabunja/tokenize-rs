@@ -31,12 +31,14 @@
 //! 
 //! [Tokenize]: https://github.com/cyyynthia/tokenize
 
+#[macro_use] extern crate anyhow;
 extern crate base64;
 extern crate crypto;
 
 use chrono::Utc;
 use hmac_sha256::HMAC;
-use std::{string::FromUtf8Error, str, error::Error};
+use std::str;
+use anyhow::Result;
 
 pub const TOKENIZE_VERSION: u32 = 1;
 pub const TOKENIZE_EPOCH: i64 = 1546300800000;
@@ -59,7 +61,7 @@ impl Tokenize {
         self
     }
 
-    pub fn generate<S: Into<String>>(&self, account_id: S) -> Result<String, FromUtf8Error> {
+    pub fn generate<S: Into<String>>(&self, account_id: S) -> Result<String> {
         let current_time = Self::current_token_time().to_string();
         let account_part = base64::encode_config(account_id.into(), base64::STANDARD_NO_PAD);
         let time_part = base64::encode_config(current_time, base64::STANDARD_NO_PAD);
@@ -80,7 +82,7 @@ impl Tokenize {
     /// 
     /// * `token` - The provided token
     /// * `account_fetcher` - The closure used to fetch the account. It'll receive the account id as a string
-    /// and should return a struct that implements [`Account`] wrapped in a [`Box`].
+    /// and should return a struct that implements [`Account`].
     /// 
     /// # Examples
     /// 
@@ -98,23 +100,24 @@ impl Tokenize {
     /// let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
     /// 
     /// tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
-    ///     Some(Box::new(TestAccount))
+    ///     Some(TestAccount)
     /// }).expect("Couldn't validate token");
     /// ```
-    pub fn validate<S, F>(&self, token: S, account_fetcher: F) -> Result<Box<dyn Account>, Box<dyn Error>> where 
+    pub fn validate<S, F, A>(&self, token: S, account_fetcher: F) -> Result<A> where 
         S: Into<String>,
-        F: Fn(String) -> Option<Box<dyn Account>> {
+        F: Fn(String) -> Option<A>,
+        A: Account {
         let token = token.into();
         let splitted = token.split(".").collect::<Vec<&str>>();
 
         let max_len = if self.prefix.is_some() { 4 } else { 3 };
-        if splitted.len() < 3 || splitted.len() > max_len { return Err("Token is invalid".into()); }
+        if splitted.len() < 3 || splitted.len() > max_len { bail!("Token is invalid") }
 
         let signature_string;
 
         if let Some(prefix) = &self.prefix {
             if prefix != splitted[0] {
-                return Err("Token prefix doesn't match".into());
+                bail!("Token prefix doesn't match")
             }
 
             signature_string = format!("{}.{}.{}", prefix, splitted[1], splitted[2]);
@@ -125,7 +128,7 @@ impl Tokenize {
         let signature = Self::compute_hmac(&signature_string, &self.secret);
 
         if !crypto::util::fixed_time_eq(base64::encode_config(signature, base64::STANDARD_NO_PAD).as_bytes(), splitted[max_len - 1].as_bytes()) {
-            return Err("Token signature doesn't match".into());
+            bail!("Token signature doesn't match")
         }
 
         let account_id: String = str::from_utf8(&base64::decode_config(splitted[max_len - 3], base64::STANDARD_NO_PAD)?)?.to_string();
@@ -135,11 +138,11 @@ impl Tokenize {
         
         let account = if let Some(account) = account_opt {
             account
-        } else { return Err("No account is tied to this id".into()); };
+        } else { bail!("No account is tied to this id") };
 
         let last_token_reset = account.last_token_reset();
         if last_token_reset as i64 > ((timestamp as i64 * 1000) + TOKENIZE_EPOCH) {
-            return Err("Token was invalidated".into());
+            bail!("Token was invalidated")
         }
 
         Ok(account)
@@ -192,7 +195,7 @@ mod tests {
     fn validate_token() {
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
         tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
-            Some(Box::new(TestAccount { last_token_reset: 0 }))
+            Some(TestAccount { last_token_reset: 0 })
         }).expect("Couldn't validate token");
     }
 
@@ -202,7 +205,7 @@ mod tests {
 
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec()).set_prefix(prefix);
         tokenize.validate("prefix.MzI2MzU5NDY2MTcxODI2MTc2.OTUzNDE0NDE.JMOWr0OOZqbqqTkQp5LvvzBmsvu5JWbAPp4UpwzyJKI", |_id| {
-            Some(Box::new(TestAccount { last_token_reset: 0 }))
+            Some(TestAccount { last_token_reset: 0 })
         }).expect("Couldn't validate token");
     }
 
@@ -210,7 +213,7 @@ mod tests {
     fn validate_invalidated_token() {
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
         assert!(tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.ucU3pXWOg2L6w5ErFLraknIOjzQLuI0HqhBDpdII+Wc", |_id| {
-            Some(Box::new(TestAccount { last_token_reset: 1641641228500 }))
+            Some(TestAccount { last_token_reset: 1641641228500 })
         }).is_err());
     }
 
@@ -218,7 +221,7 @@ mod tests {
     fn validate_token_with_invalid_signature() {
         let tokenize = Tokenize::new("uwu".as_bytes().to_vec());
         assert!(tokenize.validate("MzI2MzU5NDY2MTcxODI2MTc2.OTUzMzQ4MDc.thisisinvalid", |_id| {
-            Some(Box::new(TestAccount { last_token_reset: 0 }))
+            Some(TestAccount { last_token_reset: 0 })
         }).is_err());
     }
 }
