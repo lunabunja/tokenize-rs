@@ -103,9 +103,9 @@ impl Tokenize {
     ///     Some(TestAccount)
     /// }).expect("Couldn't validate token");
     /// ```
-    pub fn validate<S, F, A>(&self, token: S, account_fetcher: F) -> Result<A> where 
+    pub fn validate<S, F, A>(&self, token: S, mut account_fetcher: F) -> Result<A> where 
         S: Into<String>,
-        F: Fn(String) -> Option<A>,
+        F: FnMut(String) -> Option<A>,
         A: Account {
         let token = token.into();
         let splitted = token.split(".").collect::<Vec<&str>>();
